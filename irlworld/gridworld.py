@@ -133,4 +133,145 @@ class Gridworld(IRLworld):
         xi, yi = self.index_to_state(i)
         xj, yj = self.actions[j]
         xk, yk = self.index_to_state(k)
-        
+
+        if not self.neighboring((xi, yi), (xk, yk)):
+            return 0
+
+        if (xi + xj, yi + yj) == (xk, yk):
+            return 1 - self.wind + self.wind/self.n_actions
+
+        if (xi, yi) != (xk, yk):
+            return self.wind/self.n_actions
+
+        # Both are the same point, we can only move here by either moving
+        # off the grid or being blown off the grid. Are we on a corner or not?
+        if (xi, yi) in {(0,0), (self.grid_size - 1, self.grid_size - 1)
+                        (0, self.grid_size - 1), (self.grid_size - 1, 0)}:
+            # Corner
+            # Was the action intended to move it off the grid
+            if not (0 <= xi + xj < self.grid_size and 0 <= yi+yj < self.grid_size):
+                # Yes
+                # 2 because we can go off-grid in two ways 
+                return 1 - self.wind + 2*self.wind/self.n_actions
+            else:
+                # No
+                return 2*self.wind/self.n_actions
+        else:
+            # Not a Corner
+            # An edge?
+            if (xi not in {0, self.grid_size-1} and
+                yi not in {0, self.grid_size-1}):
+                # No
+                return 0
+            else:
+                # Yes
+                # Was the action intended to move it off the grid
+                if not (0 <= xi+xj < self.grid_size and 0<= yi+yj < self.grid_size):
+                    # Yes
+                    return 1 - self.wind + self.wind/self.n_actions
+                else:
+                    # No
+                    return self.wind/self.n_actions
+        return 0
+
+    def reward(self, i):
+        """
+        Reward for being in state specified by the given index
+
+        i : State index. int
+        """
+        if state_int == self.n_states - 1:
+            return 1
+        else:
+            return 0
+
+    def average_reward(self, n_traj, traj_length, policy):
+        """
+        Returns the average reward obtained by following a given policy over
+        n_traj trajectories of length traj_length
+
+        policy : Map from state indices to action indices
+        n_traj : Number of trajectories. int
+        traj_length : Length of an episode. int
+        """
+
+        trajectories = self.generate_trajectories(n_traj, traj_length, policy)
+        rewards = [[r for _, _, r in trajectory] for trajectory in trajectories]
+        rewards = np.array(rewards)
+
+        total_reward = rewards.sum(axis=1)
+
+        return total_reward.mean(), total_reward.std()
+
+    def optimal_policy(self, i):
+        """
+        Defines the optimal policy for this gridworld
+
+        i : State index. int
+        """
+        sx, sy = self.index_to_state(i)
+
+        if sx < self.grid_size and sy < self.grid_size:
+            return rn.randint(0,2)
+        if sx < self.grid_size-1:
+            return 0
+        if sy < self.grid_size-1:
+            return 1
+        raise ValueError("Unexpected state")
+
+    def optimal_policy_deterministic(self, i):
+        """
+        Deterministic version of the optimal policy for this gridworld
+
+        i : State index. int
+        """
+        sx, sy = self.index_to_state(i)
+        if sx < sy:
+            return 0
+        else:
+            return 1
+            
+    def generate_trajectories(self, n_traj, traj_length, policy, random_start=False):
+        """
+        Generates n_traj trajectories with length traj_length according to the given policy
+
+        n_traj : Number of trajectories. int
+        traj_length : Length of an episode. int
+        policy : Map from state indices to action indices
+        random_start : Whether to start randomly (default False). bool
+        """
+
+        trajectories = []
+        for _ in range(n_traj):
+            if random_start:
+                sx, sy = rn.randint(self.grid_size), rn.randint(self.grid_size)
+            else:
+                sx, sy = 0, 0
+
+            trajectory = []
+            for _ in range(traj_length):
+                if rn.random() < self.wind:
+                    action = self.actions[rn.randint(0, self.n_actions)]
+                else:
+                    action = self.actions[policy(self, state_to_index((sx,sy)))]
+
+                if ( 0<= sx + action[0] < self.grid_size and
+                     0 <= sy + action[1] < self.grid_size):
+                    next_sx = sx + action[0]
+                    next_sy = sy + action[1]
+                else:
+                    next_sx = sx
+                    next_sy = sy
+
+                state_int = self.state_to_index((sx,sy))
+                action_int = self.actions.index(action)
+                next_state_int = self.state_to_index((next_sx, next_sy))
+                reward = self.reward(next_state_int)
+                trajectory.append((state_int, action_int, reward))
+
+                sx = next_sx
+                sy = next_sy
+                
+            trajectories.append(trajectory)
+
+        return np.array(trajectories)            
